@@ -1,0 +1,12 @@
+{
+	nLevels: 7,
+	levels: [ 
+		{ name: "Level 1", title: "Level 1", description: "Ovo je nivo 1.\nBla bla." },
+		{ name: "Level 2", title: "Level 2", description: "...." },
+		{ name: "Level 3", title: "Level 3", description: "Neki tekst" },
+		{ name: "Level 4", title: "Level 4", description: "Informacije o nivou" },
+		{ name: "Level 5", title: "Level 5", description: "By MatejaS" },
+		{ name: "Level 6", title: "Level 6", description: "Informacije o nivou" },
+		{ name: "Level 7", title: "Level 7", description: "By MatejaS" }
+	]
+}

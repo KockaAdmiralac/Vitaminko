@@ -1,0 +1,7 @@
+{
+	barracks: [
+		{ x: 400, y: 300, team: neutral },
+		{ x: 200, y: 100, team: blue    },
+		{ x: 600, y: 400, team: red     }
+	]
+}

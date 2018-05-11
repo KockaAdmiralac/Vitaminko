@@ -1,0 +1,1173 @@
+/**
+* @name AuraluxTest
+* @package rs.kockasystems.auraluxtest
+* @date 29/09/15
+* @author KockaAdmiralac
+* @author Akimil
+* @author MatejaS
+*/
+
+/**
+ * @description TODO
+ * Idea for the AI :
+ * AI will have two different levels, the independent AI of each particle and the total coordinated AI of a team.
+ * The team AI will have priority over independent particle AI.
+ * Firstly, I describe the independent AI because it is simpler, and then I merge it with the team AI.
+ * So, the whole point of the independent particle AI is to have particles which protect some sun, ie. it is useless to have particles near the sun, 
+ * if they don't defend it automatically. 
+ * Now, I split further description in two phases: (particles near the sun) (should defend it automatically). 
+ * The greatest problem is to determine which particles are actually near the sun (what we consider being near to the sun).
+ * So, I will do this as simple as possible-simply take all particles with the distance to the sun less than some given SUN_NEIGHBORHOOD. 
+ * Defending the sun is interpreted as moving to the point at the given  distance of the sun in the direction of the attack (still very simple compared to team AI).
+ * Now, the team AI. This AI isn't perfect.
+ * One of it's main bugs is that sun mostly work independently, but never mind, I am happy to have this.
+ * As each sun works independently, for each sun we determine the next attack target.
+ * The target potential value of some sun we calculate as: the number of the particles of the same team in the sun's neighborhood divided by SUN_NEIGHBORHOOD,
+ * and for each other particle in the sun's team we add to the potential value 1 / distance(sun, particle).
+ * When we calculate that, we multiply it by the distance(attacking sun, attacked sun) and that is the final target potential.
+ * We choose to attack the enemy sun with lowest target potential, if that minimal value is  less than some attack potential that we compute for the attacking sun.
+ * That attack potential will be computed in the following way : we count how many particles we have in the sun's neighborhood 
+ * (+ eventually some other facts about teammates around the attacked sun, and possibility to extract particles from there, but I'll think later about it).
+ * I'll know how good is the AI when implement it.
+ */
+
+package rs.kockasystems.auraluxtest;
+
+/**
+* Library imports
+*/
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Random;
+
+import com.badlogic.gdx.ApplicationAdapter;
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input.Buttons;
+import com.badlogic.gdx.audio.Sound;
+import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.ParticleEffect;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer.ShapeType;
+import com.badlogic.gdx.input.GestureDetector;
+import com.badlogic.gdx.math.Circle;
+import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Vector2;
+import com.badlogic.gdx.math.Vector3;
+
+
+
+/**
+* The main class of the application.
+* @author KockaAdmiralac
+*/
+
+public class AuraluxTest extends ApplicationAdapter
+{
+	
+	// Class variables
+	private final Input input = new Input();					// Input processor
+	private final Random rnd = new Random();					// Random generator
+	private Vector2 touched, dragged = new Vector2();			// Circle coordinates
+	private ShapeRenderer renderer;								// Renderer for circle
+	private Circle selectedCircle;								// The selected circle
+	private boolean selecting, forcedRadius;					// Is circle currently being selected, and is radius too small?
+	private SpriteBatch batch;									// Batch to draw things with
+	private ArrayList<Soldier> soldiers;	 					// The list of soldiers
+	private ArrayList<Barrack> barracks;						// The list of barracks
+	private ArrayList<Integer> xlist;							// Will be important for speeding up the collision detection
+	private BitmapFont font;									// The font for writing
+	private int soundVolume;									// Volume of sound effects. (Not working currently, I think)
+	private boolean enableParticles;							// Will particles be enabled?
+	private List<Effect> effects;								// List of currently playing effects.
+	private ArrayList<MParticle> mparticles;					// List of MParticles
+	private OrthographicCamera camera; 							// The almighty camera!
+	private float[] target_potential;							// Moved this here
+	private BluetoothConnection btc;
+	private DialogBuilder db;
+	private boolean multiplayer;
+	private String current;
+	
+	// Texture arrays - allow accessing textures with indexes, not with if-s. Implemented by MatejaS
+	private final Texture[] barrackTextures = new Texture[3];
+	private final Texture[] soldierTextures = new Texture[3];
+	
+	// Constants
+	private static final int MAX_BARRACKS = 5;							// The max number of barracks in one team
+	private static final byte SUN_STEP 		   			= 60;			// The number of frames for sun update (max = 255, 60 = 1 second)
+	private static final float COLLISION_DISTANCE 		= 5;			// If two soldiers are closer than this, they collide and disapear
+	private static final float SUN_ATTACK				= 5;			// When soldier is near to an enemy sun, he reduces its health
+	private static final float SUN_DEFEND		   		= 50;			// The distance at which the sun detect that it's attacked
+	private static final int SUN_MAGNET		   			= 30;			// When soldier has went near the sun, he auto repairs/attacks the sun
+	private static final float SOLDIER_SPEED 	  		= 1f;			// The speed of soldiers, ie. the number of pixels that soldier passes in 1 second
+	private static final float ACCELERATION	   			= 0.05f;		// Maximal acceleration that soldier can attain
+	private static final float FRICTION_DECELERATION	= 0.01f;		// The decceleration due to the friction
+	private static final int MAX_HEALTH 		   		= 100;			// The health of the normal (unattacked) sun
+	private static final int ATTACK_DAMAGE		   		= 1;			// The damage made to an enemy sun.
+	private static final int HEAL_REGENERATION    		= 1;			// The health regeneration when sun is healed.
+	private static final float NULL_VALUE 				= -1000000.0f; 	// The NULL_VALUE for touched vector
+	
+	// The game base resolution
+	public static final int WIDTH						= 800;
+	public static final int HEIGHT 						= 480;
+	
+	// The actual screen resolution (please note in DesktopLauncher it's now SCREEN_WIDTH and SCREEN_HEIGHT, not WIDTH and HEIGHT)
+	public static final int SCREEN_WIDTH 				= 800; 
+	public static final int SCREEN_HEIGHT 				= 600;
+	
+	// Team constants
+	private static final byte TEAM_NEUTRAL 				= 0;
+	private static final byte TEAM_BLUE 				= 1;
+	private static final byte TEAM_RED 					= 2;
+	
+	// Temporary constant numbers of barracks. At least I think they are temporary
+	private static final int N_RED_BARRACKS = 1;
+	private static final int N_BLUE_BARRACKS = 1;
+	private static final int N_NEUTRAL_BARRACKS = MAX_BARRACKS - N_RED_BARRACKS - N_BLUE_BARRACKS;
+	
+	/**
+	 * Define each number used multiple times in code that isn't 0 or 1 as a constant, for example when you need width / height
+	 * you should use WIDTH / HEIGHT instead of "magic numbers" (that'll help me to make it work on Android, as we'll have
+	 * different resolutions)
+	 * 
+	 * :)
+	 * @author MatejaS
+	 */
+	
+	final String[] hj = {"Host", "Join"};
+	final String[] sp = {"Search", "Paired devices"};
+	 
+	/** 
+	* The default method that is called when window is opened
+	* @author KockaAdmiralac
+	*/
+	public AuraluxTest(final BluetoothConnection btc, final DialogBuilder db)
+	{
+		this.btc = btc;
+		this.db = db;
+	}
+	
+	@Override
+	public void create ()
+	{
+		db.which = -1;
+		db.setTitle("Connection");
+		db.setItems(hj);
+		db.show();
+		while(db.which == -1);
+		if(db.which == 0)btc.accept();
+		else
+		{
+			db.setItems(sp);
+			db.which = -1;
+			db.show();
+			while(db.which == -1);
+			if(db.which == 0)
+			{
+				btc.scan();
+				while(btc.getScannedDevice() == null);
+				btc.connect(btc.getScannedDevice());
+			}
+			else
+			{
+				db.setItems(btc.getPairedDevicesNames());
+				db.which = -1;
+				db.show();
+				while(db.which == -1);
+				btc.connect(btc.getPairedDevices()[db.which]);
+			}
+		}
+		while(!btc.isConnected());
+		
+		// Variable creating
+		batch 							= new SpriteBatch();
+		renderer 						= new ShapeRenderer();
+		selectedCircle					= new Circle();
+		soldierTextures[TEAM_BLUE]		= new Texture("res/FriendSoldier.png");
+		barrackTextures[TEAM_BLUE] 		= new Texture("res/FriendBarrack.png");
+		soldierTextures[TEAM_RED] 		= new Texture("res/EnemySoldier.png");
+		barrackTextures[TEAM_RED] 		= new Texture("res/EnemyBarrack.png");
+		barrackTextures[TEAM_NEUTRAL]  	= new Texture("res/NeutralBarrack.png");
+		soldiers 						= new ArrayList<Soldier>();
+		barracks						= new ArrayList<Barrack>();
+		xlist 							= new ArrayList<Integer>();
+		font							= new BitmapFont();
+		effects							= new ArrayList<Effect>();
+		mparticles						= new ArrayList<MParticle>();
+		target_potential				= new float[MAX_BARRACKS];
+		
+		// Will be loaded from Settings section after making GUI
+		enableParticles = true;
+		soundVolume 	= 50;
+		multiplayer = true;
+		
+		// Initialize 'touched' vector
+		touched = new Vector2(NULL_VALUE, NULL_VALUE);
+		
+		// Randomize barrack positions. Will be removed in further versions.
+		randomizeBarracks();
+		
+		// This determines the best resolution for the game.
+		camera = new OrthographicCamera();
+		final float scale = Math.min((float) SCREEN_WIDTH / (float) WIDTH, (float) SCREEN_HEIGHT / (float) HEIGHT);
+		camera.setToOrtho(false, SCREEN_WIDTH / scale, SCREEN_HEIGHT / scale);
+		
+		// Setting the Input processor
+		Gdx.input.setInputProcessor(input);
+		
+	}
+	
+	
+	
+	
+	/**
+	 * The default method that is called when window is closed.
+	 * @author KockaAdmiralac
+	 */
+	@Override
+	public void dispose()
+	{
+		// Massive disposal
+		// Every graphic and music used must be disposed, because memory leak could occur.
+		font.dispose();
+		for(int i=0; i < 3; ++i)barrackTextures[i].dispose();
+		for(Effect effect : effects)effect.stop();
+		soldierTextures[TEAM_RED].dispose();
+		soldierTextures[TEAM_BLUE].dispose();
+		renderer.dispose();
+		batch.dispose();
+	}
+	
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	/**
+	 * The default method called on every 60th part of a second.
+	 * @author KockaAdmiralac
+	 */
+	@Override
+	public void render ()
+	{
+		
+		// Clearing
+		Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+		
+		// Setting the camera
+		batch.setProjectionMatrix(camera.combined);
+		
+		// Begin drawing
+		batch.begin();
+			
+			// Draw barracks' sprites
+			for(int i=0; i<barracks.size(); i++) {
+				barracks.get(i).draw(batch);
+				barracks.get(i).update();
+			}
+			
+			// Draw soldier sprites
+			for(int i=0; i<soldiers.size(); i++) {
+				soldiers.get(i).draw(batch);
+				soldiers.get(i).update();
+			}
+			
+			// Draw particles
+			if((enableParticles || soundVolume > 0) && effects.size() > 0)for(int i=0; i<effects.size(); ++i)
+			{
+				if(effects.get(i).started())effects.get(i).update(batch, Gdx.graphics.getDeltaTime());
+				else if(effects.get(i).stopped())
+				{
+					effects.get(i).stop();
+					effects.remove(i);
+				}
+			}
+			
+			
+		batch.end();
+		
+		// Rendering the select circle
+		if(touched.x != NULL_VALUE && touched.y != NULL_VALUE)
+		{
+			renderer.setProjectionMatrix(camera.combined);
+			renderer.begin(ShapeType.Line);
+			selectedCircle.x = (touched.x + dragged.x) / 2;
+			selectedCircle.y = (touched.y + dragged.y) / 2;
+			selectedCircle.radius = forcedRadius ? 100f : pitagora(Math.abs(touched.x - dragged.x), Math.abs(touched.y - dragged.y)) / 2;
+			renderer.circle(selectedCircle.x, Gdx.graphics.getHeight() - selectedCircle.y, selectedCircle.radius);
+			renderer.end();
+		}
+		
+		// Start rendering MParticles
+		renderer.setProjectionMatrix(camera.combined);
+		renderer.begin(ShapeType.Filled);
+		
+			for (int i = mparticles.size() - 1; i >= 0; i--)
+			{
+				MParticle mp = mparticles.get(i);
+				if (mp.isDead())
+				{
+					mparticles.remove(i);
+					continue;
+				}
+				
+				mp.time--;
+				float alpha = 0.2f;
+				
+				Gdx.gl.glEnable(GL20.GL_BLEND);
+				Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+				
+				renderer.setColor(0.9f, 0.9f, 0.9f, alpha);
+				renderer.circle(mp.x, mp.y, mp.radius);
+				
+				Gdx.gl.glDisable(GL20.GL_BLEND);
+			}
+			
+		// End rendering MParticles
+		renderer.end();
+		
+		if(multiplayer)
+		{
+			// Read from Bluetooth connection
+			current = btc.read();
+			if(current == null)System.out.println("Current is null...");
+			if(current != "" && current != null)
+			{
+				System.out.println("Found something!");
+				Data d = new Data(current.split("\\|"));
+				moveSoldiersInCircle(d.x, d.y, d.radius, d.x1, d.y1, TEAM_RED);
+			}
+		}
+				
+	}
+	
+	/**
+	 * =======================================================================================================================================================================
+	 * 																			CLASSES
+	 * =======================================================================================================================================================================
+	 */
+	/**
+	 * 
+	 * We'll use this for zooming, but I can't test it on Windows :/
+	 * @description TODO
+	 * @author MatejaS
+	 */
+	private class GDetector implements GestureDetector.GestureListener
+	{
+		
+		// Unused methods
+		@Override
+		public boolean fling(final float arg0, final float arg1, final int arg2) { return false; }
+		@Override
+		public boolean pan(final float arg0, final float arg1, float arg2, float arg3) { return false; }
+		@Override
+		public boolean panStop(float arg0, float arg1, int arg2, int arg3) { return false; }
+		@Override
+		public boolean pinch(Vector2 arg0, Vector2 arg1, Vector2 arg2, Vector2 arg3) { return false; }
+		@Override
+		public boolean tap(float arg0, float arg1, int arg2, int arg3) { return false; }
+		@Override
+		public boolean touchDown(float arg0, float arg1, int arg2, int arg3) { return false; }
+		@Override
+		public boolean zoom(float initialDist, float dist) { return false; }
+		
+		@Override
+		public boolean longPress(float arg0, float arg1)
+		{
+			camera.zoom -= 0.1f;
+			camera.update();
+			return false;
+		}
+	}
+	
+	/**
+	 * A class for handling the input for the whole game.
+	 * @author KockaAdmiralac
+	 */
+	private class Input extends GestureDetector
+	{
+		
+		private final Vector3 coords = new Vector3(0, 0, 0);
+		
+		public Input() { super(30, 0.4f, 1.1f, 0.15f, new GDetector()); }
+		
+		// Unused methods
+		@Override
+		public boolean keyDown(final int keycode) { return false; }
+		@Override
+		public boolean keyUp(final int keycode) { return false; }
+		@Override
+		public boolean keyTyped(final char character) { return false; }
+		@Override
+		public boolean scrolled(final int amount) { return false; }
+		@Override
+		public boolean mouseMoved(final int screenX, final int screenY) { return false; }
+		
+		/**
+		 * A utility function to convert screen coordinates to world coordinates
+		 * It is here (and not with other util functions) for a reason, as we only use it in here :)
+		 * @param screenX screen x coord
+		 * @param screenY screen y coord
+		 * @return void
+		 * @author MatejaS
+		 * @version 1.0
+		 * @since 1.3
+		 * @date 31/10/2015 (Halloween!)
+		 */
+		private void unproject(int screenX, int screenY)
+		{
+			coords.x = screenX;
+			coords.y = screenY;
+			camera.unproject(coords);
+			coords.y = Gdx.graphics.getHeight() - coords.y - 1;
+		}
+		
+		
+		
+		/**
+		 * The default method for handling the mouse click or touch event.
+		 * @author KockaAdmiralac
+		 */
+		@Override
+		public boolean touchDown(final int screenX, final int screenY, final int pointer, final int button)
+		{
+			// Superclass method call
+			super.touchDown(screenX, screenY, pointer, button);
+			
+			// Call to unproject. NOTE: DO NOT USE screenX AND screenY AFTERWARDS!
+			unproject(screenX, screenY);
+			
+			if(button == Buttons.LEFT && !selecting)
+			{
+				touched = new Vector2(coords.x, coords.y);
+				dragged.x = coords.x;
+				dragged.y = coords.y;
+			}
+			return true;
+		}
+		
+		
+		
+		/**
+		 * The default method for handling the mouse un-click or un-touch event.
+		 * @author KockaAdmiralac
+		 * @author Akimil
+		 */
+		@Override
+		public boolean touchUp(final int screenX, final int screenY, final int pointer, final int button)
+		{
+			super.touchUp(screenX, screenY, pointer, button);
+			unproject(screenX, screenY);
+			if(selecting)
+			{
+				moveSoldiersInCircle(selectedCircle.x, selectedCircle.y, selectedCircle.radius, coords.x, coords.y, TEAM_BLUE);
+				btc.write(new Data((selectedCircle.x + "|" +selectedCircle.y + "|" + selectedCircle.radius + "|" + coords.x + "|" + coords.y).split("\\|")));
+				touched.set(NULL_VALUE, NULL_VALUE);
+				forcedRadius = false;
+			}
+			else if(selectedCircle.radius < 1f) forcedRadius = true;
+			if(button == Buttons.LEFT) selecting = !selecting;
+			return true;
+		}
+		
+		
+		
+		/**
+		 * The default method for handling the mouse drag or drag event.
+		 * @author KockaAdmiralac
+		 */
+		@Override
+		public boolean touchDragged(final int screenX, final int screenY, final int pointer)
+		{
+			super.touchDragged(screenX, screenY, pointer);
+			unproject(screenX, screenY);
+			if(touched.x != NULL_VALUE && touched.y != NULL_VALUE)
+			{
+				dragged.x = coords.x;
+				dragged.y = coords.y;
+				if(selecting)
+				{
+					selecting = false;
+					forcedRadius = false;
+					touched.x = coords.x;
+					touched.y = coords.y;
+				}
+			}
+			return true;
+		}
+		
+		
+		
+	}
+	
+	
+	
+	/**
+	 * A data class for sun soldiers.
+	 * x  	- The X position of the soldier.
+	 * y  	- The Y position of the soldier.
+	 * px 	- The X position of the destination.
+	 * py 	- The Y position of the destination.
+	 * team - The team in which soldier is.
+	 * exists-Determines if the soldier exists at all
+	 * original_barrack-The barrack the soldier is supposed to defend;
+	 * defending - Show us if the soldier is actually defending some barrack
+	 * @author KockaAdmiralac
+	 */
+	private class Soldier
+	{
+		
+		// Variable definition
+		public float x, y, px, py, vx, vy, ax, ay;
+		private byte team;
+		private boolean exists = true;
+		public boolean free = true;
+		public int original_barrack = 0;
+		private int following;
+		
+		/**
+		 * The class constructor.
+		 * @param x
+		 * @param y
+		 * @param vx
+		 * @param vy
+		 * @author KockaAdmiralac
+		 * @author Akimil
+		 */
+		public Soldier(final float x, final float y, final float vx, final float vy, final byte team, final int origin) { init(x, y, vx, vy, team, origin); }
+		
+		public void init(final float x, final float y, final float vx, final float vy, final byte team, final int origin)
+		{
+			this.x 					= x;
+			this.px 				= x;
+			this.y 					= y;
+			this.py 				= y;
+			this.vx					= vx;
+			this.vy 				= vy;
+			this.team 				= team;
+			this.original_barrack 	= origin;
+			this.following			= -1;
+			this.exists 			= true;
+		}
+		
+		/**
+		 * The method called on frame update.
+		 * @author Akimil
+		 */
+		public void update()
+		{
+			
+			if(!exists)return;
+			
+			// Determining the original_barrack
+			for(int j = 0; j < barracks.size(); ++j)
+			{
+				if(pitagora(barracks.get(j).x - x, barracks.get(j).y - y) < SUN_DEFEND && barracks.get(j).team == team && barracks.get(j).functional)
+				{
+					original_barrack = j;
+					break;
+				}
+			}
+			
+			if(free)
+			{
+				// Hear the orders of the original_barrack
+				if(barracks.get(original_barrack).attack >= 0)
+				{
+					int i = barracks.get(original_barrack).attack;
+					px = barracks.get(i).x;
+					py = barracks.get(i).y;
+				}
+				
+				// Independent particle AI
+				if(barracks.get(original_barrack).attacked > 0) following=barracks.get(original_barrack).attacked_by.get(rnd.nextInt(barracks.get(original_barrack).attacked_by.size()));
+				
+				// With team AI this should be changed
+				if(barracks.get(original_barrack).health < MAX_HEALTH)
+				{
+					px = barracks.get(original_barrack).x;
+					py = barracks.get(original_barrack).y;
+				}
+				
+				if(following >= 0)
+				{
+					if(!soldiers.get(following).exists) following = -1;
+					else
+					{
+						if(pitagora(soldiers.get(following).x - barracks.get(original_barrack).x, soldiers.get(following).y - barracks.get(original_barrack).y) > SUN_DEFEND)
+						{
+							px = barracks.get(original_barrack).x + 40 * rnd.nextFloat() - 20f;
+							py = barracks.get(original_barrack).y + 40 * rnd.nextFloat() - 20f;
+						}
+						else
+						{
+							px = soldiers.get(following).x;
+							py = soldiers.get(following).y;
+						}
+					}
+				}
+			}
+			
+			if(Math.abs(x - px) < 10f && Math.abs(y - py) < 10f) free = true;
+			
+			// Motion
+			ax = ay = 0;
+			if(x != px) ax = (float)((float)ACCELERATION * (px - x) / Math.sqrt((px - x) * (px - x) + (py - y) * (py - y)));
+			if(y != py) ay = (float)((float)ACCELERATION * (py - y) / Math.sqrt((px - x) * (px - x) + (py - y) * (py - y)));
+			
+			// Standard acceleration
+			this.vx += this.ax;
+			this.vy += this.ay;
+			
+			// Friction deceleration
+			if(vx != 0) this.vx *= (1 - FRICTION_DECELERATION);
+			if(vy != 0) this.vy *= (1 - FRICTION_DECELERATION);
+			x += vx;
+			y += vy;
+			
+			// Check max speed limit
+			if(this.vx * this.vx + this.vy * this.vy > SOLDIER_SPEED * SOLDIER_SPEED)
+			{
+				this.vx -= ax;
+				this.vy -= ay;
+			}
+			
+			int i = 0;
+			
+			// Collision detector - not optimal at all, but simple
+			for(; i < soldiers.size(); ++i) 
+			{
+				if(soldiers.get(i).exists && soldiers.get(i).team != this.team)
+				{
+					if(dist(this, soldiers.get(i)) < COLLISION_DISTANCE)
+					{
+						// There is 50% chance that both of them die, 25% that first wins, 25% that second wins
+						float tmp = rnd.nextFloat();
+						if(tmp >= 0 && tmp < 0.75)
+						{
+							die(false, false);
+							return;															// First dies
+						}
+						else if(tmp >= 0.25 && tmp < 1) soldiers.get(i).die(false, false);  // Second dies
+					}
+				}
+			}
+			
+			// Sun attack detector
+			for(i = 0; i < barracks.size(); i++)
+			{
+				// Attack
+				if( barracks.get(i).team != this.team && barracks.get(i).team != 0 && pitagora(this.x - barracks.get(i).x, this.y - barracks.get(i).y) < SUN_ATTACK && barracks.get(i).x == this.px && barracks.get(i).y == this.py)
+				{
+					while(exists)
+					{
+						barracks.get(i).attack();	 												// Attack the barrack
+						if(rnd.nextFloat() > 0.5f) die(true, false);								// 50% chance of surviving
+						if(barracks.get(i).health <= 0)
+						{
+							barracks.get(i).changeTeam((byte)0);									//Change team if lost health
+							break;				
+						}
+					}
+					return;
+				}
+				
+				// Recover
+				else if((barracks.get(i).team == this.team || barracks.get(i).team == 0) && pitagora(this.x - barracks.get(i).x, this.y - barracks.get(i).y) < SUN_ATTACK && barracks.get(i).health != MAX_HEALTH && barracks.get(i).x == this.px && barracks.get(i).y == this.py)
+				{
+					if(barracks.get(i).team == 0)
+					{
+						if(rnd.nextFloat() > 0.5f)die(true, true);	// 50% chance of surviving
+						barracks.get(i).heal();
+						barracks.get(i).changeTeam((byte)team);
+					}
+					while(exists && barracks.get(i).health < MAX_HEALTH)
+					{
+						if(rnd.nextFloat() > 0.5f)die(true, true);	// 50% chance of surviving
+						barracks.get(i).heal();			 			// We could implement randomization here also
+						if(barracks.get(i).team == 0 && barracks.get(i).health == 100)
+						{
+							barracks.get(i).team = this.team;
+							barracks.get(i).functional = true;
+							break;
+						}
+					}
+					return;
+				}
+			}
+		}
+		
+		
+		
+		/**
+		 * The method called when drawing the soldier.
+		 * @param b
+		 */
+		public void draw(final SpriteBatch b)
+		{
+			if(exists)b.draw(soldierTextures[team], x, y);
+		}
+		
+		
+		
+		/**
+		 * The method called when soldier dies.
+		 * @author KockaAdmiralac
+		 * @author MatejaS
+		 */
+		public void die(final boolean b, final boolean heal)
+		{
+			exists = false;	
+			
+			final float w = (float) soldierTextures[team].getWidth() / 2.0f;
+			final float h = (float) soldierTextures[team].getHeight() / 2.0f;
+			
+			if (!heal && rnd.nextInt(3) > 0) mparticles.add(new MParticle(x + w, y + h, 4.0f + (float) rnd.nextInt(2), 5 + rnd.nextInt(3)));
+		}
+		
+		
+		
+		public void goTo(final float x1, final float y1)
+		{
+			px = x1;
+			py = Gdx.graphics.getHeight() - y1;
+			following = -1;
+
+			// If this is near to some sun, order to the soldier to attack/repare the sun
+			for(int i = 0; i < barracks.size(); ++i) if(Math.abs(px - barracks.get(i).x) < SUN_MAGNET && Math.abs(py - barracks.get(i).y) < SUN_MAGNET)
+			{
+				px = barracks.get(i).x;
+				py = barracks.get(i).y;
+				break;
+			}
+
+			free = false;
+
+			// Computing soldier acceleration
+			if(px != x) ax = (float)((ACCELERATION * px - x) / Math.sqrt((px - x) * (px - x) + (py - y) * (py - y)));
+			if(py != y) ay = (float)((ACCELERATION * py - y) / Math.sqrt((px - x) * (px - x) + (py - y) * (py - y)));
+			
+		}
+	}
+	
+	
+	
+	/**
+	 * The data class for barracks (suns).
+	 * index	 - The index of the barrack in the barracks list
+	 * x         - The X position of the barrack
+	 * y         - The Y position of the barrack
+	 * level     - The level of the barrack
+	 * team	     - The team of the barrack//Team 0-neutral, Team 1, Team 2...
+	 * functional- Determines if the sun is producing soldiers or not
+	 * gauge     - The health gauge
+	 * gaugeTeam - What team is posessing the health gauge
+	 * step      - Current step, by default when it reaches 60 new soldier is made.
+	 * attacked  - True iff the sun is currently attacked by enemy forces
+	 * @author KockaAdmiralac
+	 */
+	private class Barrack
+	{
+		
+		// Variable definition
+		private int index;
+		public float x, y;
+		private byte level, team;
+		private int step;
+		private int health = MAX_HEALTH;
+		private float fadeOut = 0;
+		private boolean functional = false;
+		public int attacked = 0, attack = -1;
+		public ArrayList<Integer> attacked_by = new ArrayList<Integer>();
+		/**
+		 * The class constructor.
+		 * @param x
+		 * @param y
+		 * @param team
+		 * @author KockaAdmiralac
+		 */
+		public Barrack(final float x, final float y, final byte team, final int index)
+		{
+			this.x = x;
+			this.y = y;
+			this.team = team;
+			this.index = index;
+			if(team == TEAM_NEUTRAL)
+			{
+				functional = false;
+				health = 0;
+			}
+			else functional = true;
+			this.fadeOut = 1f;
+		}
+		
+		
+		
+		/**
+		 * The method called on frame update.
+		 * @author KockaAdmiralac
+		 */
+		public void update()
+		{
+			if(health == MAX_HEALTH) functional = true;
+			++step;
+			if(step == SUN_STEP)
+			{
+				step = 0;
+				if(functional)
+				{
+					// I use variable step here as some other variable : don't be confused, this should normally work as long as step is int
+					while(step < soldiers.size() && soldiers.get(step).exists) ++step;
+					if(step == soldiers.size()) soldiers.add(new Soldier(x + (rnd.nextFloat() * 40) - 20f, y + (rnd.nextFloat() * 40) - 20f, rnd.nextFloat(), rnd.nextFloat(), team, index));
+					else soldiers.get(step).init(x + (rnd.nextFloat() * 40) - 20f, y + (rnd.nextFloat() * 40) - 20f, rnd.nextFloat(), rnd.nextFloat(), team, index);
+				}
+				step = 0;
+			}
+			
+			// Important for independent particle AI
+			attacked = 0;
+			attacked_by.clear();
+			for(int i = 0; i < soldiers.size(); ++i)
+			{
+				if(soldiers.get(i).exists && soldiers.get(i).team != team && pitagora(soldiers.get(i).x - x, soldiers.get(i).y - y) < SUN_DEFEND)
+				{
+					attacked++;
+					attacked_by.add(i);
+				}
+			}
+			
+			// Sun's AI
+			for(int i=0; i < MAX_BARRACKS; ++i)
+			{
+				if(barracks.get(i).team == team && barracks.get(i).functional)continue;
+				target_potential[i] = 1 / SUN_DEFEND;
+				byte t = barracks.get(i).team;
+				if(t != team) for(int j = 0; j < soldiers.size(); ++j)
+				{
+					if(soldiers.get(j).exists && soldiers.get(j).team == t)
+					{
+						if(pitagora(barracks.get(i).x - soldiers.get(j).x, barracks.get(i).y - soldiers.get(j).y)<SUN_DEFEND) target_potential[i] += 1 / SUN_DEFEND;
+						else target_potential[i] += 1 / pitagora(barracks.get(i).x - soldiers.get(j).x, barracks.get(i).y - soldiers.get(j).y);
+					}
+				}
+				
+				target_potential[i] *= (barracks.get(i).team == 0 || !barracks.get(i).functional) ? 100 : (t != team) ? (barracks.get(i).health + 1) / 10 : (100 - barracks.get(i).health);
+				
+				// Finalize
+				target_potential[i] *= pitagora(barracks.get(i).x - x, barracks.get(i).y - y);
+			}
+			float attack_potential = 0;
+			for(int j = 0; j < soldiers.size(); ++j) if(soldiers.get(j).exists && soldiers.get(j).team == team) if(pitagora(x-soldiers.get(j).x, y-soldiers.get(j).y)<SUN_DEFEND) ++attack_potential; 
+			
+			// Finalize
+			attack_potential *= health;
+			attack_potential /= 10; // Here comes the appropriate constant determining the aggression of AI
+			float min_potential = 1000000000;
+			int min_index =- 1;
+			for(int i=0; i < MAX_BARRACKS; ++i)
+			{
+				if(barracks.get(i).team == team && barracks.get(i).functional)continue;
+				if(target_potential[i] < min_potential)
+				{
+					min_potential = target_potential[i];
+					min_index = i;
+				}
+			}
+			if(min_index == -1)
+			{
+				attack =- 1;
+				return;
+			}
+			attack = attack_potential > min_potential ? min_index : -1;
+		}
+		
+		
+		
+		/**
+		 * The method called when drawing the sun.
+		 * @param batch
+		 */
+		public void draw(final SpriteBatch batch)
+		{
+			if((team == 0 ? (functional == false) : (true))) batch.draw(barrackTextures[team], x - (barrackTextures[team].getWidth() / 2), y - (barrackTextures[team].getHeight() / 2));
+			
+			if(health != MAX_HEALTH)
+			{
+				font.setColor(team == TEAM_RED ? 255 : 0, team == TEAM_BLUE ? 255 : 0, 0, fadeOut);
+				font.draw(batch, String.valueOf(health), x, y);
+			}
+			else if(fadeOut > 0)
+			{
+				fadeOut -= 0.01f;
+				font.setColor(team == TEAM_RED ? 255 : 0, team == TEAM_BLUE ? 255 : 0, 0, fadeOut);
+				font.draw(batch, String.valueOf(health), x, y);
+			}
+		}
+		
+		
+		
+		/**
+		 * The method called when barracks change team.
+		 * @todo Add change team animation
+		 * @param team
+		 * @author KockaAdmiralac
+		 */
+		public void changeTeam(final byte team)
+		{
+			effects.add(new Effect("destroy", this.x, this.y));
+			this.team = team;
+			this.health = 0;
+			functional = !(team == 0);
+		}
+		
+		
+		
+		/**
+		 * The method called when an enemy soldier attacked your barrack.
+		 * @todo Implement randomization
+		 * @todo Add attack animation
+		 * @author KockaAdmiralac
+		 */
+		public void attack()
+		{
+			health -= ATTACK_DAMAGE;
+			fadeOut = 1;
+		}
+		
+		
+		
+		/**
+		 * The method called when your soldier healed your barrack.
+		 * @todo Implement randomization
+		 * @todo Add heal animation
+		 * @author KockaAdmiralac
+		 */
+		public void heal()
+		{
+			health += HEAL_REGENERATION;
+			fadeOut = 1;
+		}
+		
+		
+	}
+	
+	/**
+	 * Class used for displaying... something?
+	 * (Mateja, opisi cemu ovo sluzi :) )
+	 * @author MatejaS
+	 *
+	 */
+	public class MParticle
+	{
+		private float x, y, radius;
+		private int lifeSpan;
+		
+		public int time;
+		
+		public MParticle(final float x, final float y, final float radius, final int lifeSpan)
+		{
+			this.x = x;
+			this.y = y;
+			this.radius = radius;
+			this.lifeSpan = lifeSpan;
+			time = lifeSpan;
+		}
+		
+		public boolean isDead() { return time <= 0; }
+		
+	}
+	
+	class Effect
+	{
+		private ParticleEffect effect;
+		private Sound sound;
+		private boolean started;
+		
+		public Effect(final String name, final float x, final float y)
+		{
+			sound = Gdx.audio.newSound(Gdx.files.internal("effects/" + name + "/" + name + ".wav"));
+			effect = new ParticleEffect();
+			effect.load(Gdx.files.internal("effects/" + name + "/" + name + ".particle"), Gdx.files.internal("images"));
+			effect.setPosition(x, y);
+			started = true;
+			if(soundVolume > 0) sound.setVolume(sound.play(), soundVolume);
+			if(enableParticles)effect.start();
+		}
+		
+		public void update(SpriteBatch batch, float delta)
+		{
+			started = !effect.isComplete();
+			effect.draw(batch, delta);
+		}
+		
+		public void stop()
+		{
+			effect.dispose();
+			sound.dispose();
+		}
+		
+		public boolean started() { return started; }
+		public boolean stopped() { return effect.isComplete(); }
+	}
+	
+	
+	
+	public class ConnectionThread extends Thread
+	{
+		
+	}
+	
+	
+	
+	/**
+	 * =======================================================================================================================================================================
+	 * 																		HELPER METHODS
+	 * =======================================================================================================================================================================
+	 */
+	
+	/**
+	 * The Pytagorian theorem method.
+	 * @param num1
+	 * @param num2
+	 * @return float
+	 * @author KockaAdmiralac
+	 */
+	private float pitagora(final float num1, final float num2){ return (float)Math.sqrt((double)(num1*num1 + num2*num2)); }
+	
+	
+	
+	/**
+	 * The distance formula, using pitagora method
+	 * @param sola
+	 * @param solb
+	 * @return float
+	 * @author Akimil
+	*/
+	private float dist(final Soldier sola, final Soldier solb){return (float)pitagora(sola.x - solb.x, sola.y - solb.y);}
+	
+	/**
+	 * Basically randomly chooses between 1 and -1
+	 * 
+	 * @return chosen value
+	 * @author MatejaS
+	 */
+	private int randomSign() { return (rnd.nextInt(2) == 0) ? 1 : -1; }
+	
+	/**
+	 * Optimal Randomization Algorithm
+	 * @description TODO
+	 * @author DjordjeA
+	 * @author MatejaS
+	 * @version 1.1	
+	 * @since 1.2
+	 * @date 17/10/2015
+	 * @date 23/10/2015
+	 */
+	private void randomizeBarracks()
+	{	
+		final int N = N_RED_BARRACKS + N_BLUE_BARRACKS + N_NEUTRAL_BARRACKS;
+		float x = (float) Math.sqrt((double) (WIDTH * HEIGHT) / (double) N);
+		final int W = (int) MathUtils.ceil((float) WIDTH / x);
+		final int H = (int) MathUtils.ceil((float) HEIGHT / x);
+		final float w = (float) WIDTH / (float) W;
+		final float h = (float) HEIGHT / (float) H;
+		
+		int visak = W * H - N;
+		boolean[] moze = new boolean[W * H];
+		Arrays.fill(moze, true);
+		
+		int[] left = {
+			N_NEUTRAL_BARRACKS,
+			N_BLUE_BARRACKS,
+			N_RED_BARRACKS
+		};
+		
+		if (visak > 0)for (int i = 0; i < visak; i++)
+		{
+			int xCoord, yCoord;
+			do
+			{
+				xCoord = rnd.nextInt(W);
+				yCoord = rnd.nextInt(H);
+			}
+			while (!moze[xCoord + yCoord * W]);
+			moze[xCoord + yCoord * W] = false;
+		}
+		
+		int cnt = 0;	// Used for counting indexes
+		
+		for (int i = 0; i < W; i++)for (int j = 0; j < H; j++)
+		{
+			if (!moze[i + j * W]) continue;
+			
+			float x1 = (float) i * w;
+			float y1 = (float) j * h;
+			
+			float xp = x1 + w / 2.0f;
+			float yp = y1 + h / 2.0f;
+			
+			float deltaX = randomSign() * rnd.nextInt(60);
+			float deltaY = randomSign() * rnd.nextInt(60);
+			
+			xp += deltaX;
+			yp += deltaY;
+			
+			int team;
+			
+			do team = rnd.nextInt(3);
+			while (left[team] <= 0);
+			
+			left[team]--;
+			
+			moze[i + j * W] = false;
+			
+			xp -= barrackTextures[team].getWidth() / 2.0f;
+			yp -= barrackTextures[team].getHeight() / 2.0f;
+			
+			barracks.add(new Barrack(xp, yp, (byte) team, cnt)); 	// I hope I guessed what the index variable is
+			++cnt;
+		}
+	}
+	
+	
+	
+	/**
+	 * Moves all soldiers in the selected circle to a specified point,
+	 * if they are in a specific team.
+	 * @param circle
+	 * @param team
+	 * @author KockaAdmiralac
+	 */
+	public void moveSoldiersInCircle(final float p1, final float p2, final float radius, final float x1, final float y1, final byte team)
+	{
+		Circle c = new Circle();
+		c.x = p1;
+		c.y = p2;
+		c.radius = radius;
+		for(Soldier s : soldiers)if(s.team == team && s.x <= c.x + c.radius && s.x >= c.x - c.radius && Gdx.graphics.getHeight() - s.y <= c.y + c.radius && Gdx.graphics.getHeight() - s.y >= c.y - c.radius)if(c.contains(s.x, Gdx.graphics.getHeight() - s.y) && c.contains(s.x, Gdx.graphics.getHeight() - s.y))s.goTo(x1, y1);
+	}
+	
+	
+	
+	/**
+	 * Squares a value, used for nicer code
+	 * @param x
+	 * @return x squared
+	 * @author MatejaS
+	 private float sq(float x) { return x * x; }
+	 * @commentout
+	 * @author KockaAdmiralac
+	 * @reason No current need, uncomment when needed
+	 */
+	
+}

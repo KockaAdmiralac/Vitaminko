@@ -1,0 +1,13 @@
+{
+	barracks: [
+		{ x: 200, y: 40, team: blue },
+		{ x: 400, y: 40, team: neutral },
+		{ x: 600, y: 40, team: yellow },
+		{ x: 200, y: 240, team: neutral },
+		{ x: 400, y: 240, team: neutral },
+		{ x: 600, y: 240, team: neutral },
+		{ x: 200, y: 440, team: green },
+		{ x: 400, y: 440, team: neutral },
+		{ x: 600, y: 440, team: red }
+	]
+}

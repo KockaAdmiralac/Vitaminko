@@ -1,0 +1,209 @@
+
+ui.png
+size: 512,128
+format: RGBA8888
+filter: Nearest,Nearest
+repeat: none
+EnemyBarrack
+  rotate: false
+  xy: 461, 81
+  size: 45, 45
+  orig: 45, 45
+  offset: 0, 0
+  index: -1
+EnemySoldier
+  rotate: false
+  xy: 2, 2
+  size: 3, 3
+  orig: 3, 3
+  offset: 0, 0
+  index: -1
+FriendSoldier
+  rotate: false
+  xy: 7, 2
+  size: 3, 3
+  orig: 3, 3
+  offset: 0, 0
+  index: -1
+GreenBarrack
+  rotate: false
+  xy: 399, 81
+  size: 60, 45
+  orig: 60, 45
+  offset: 0, 0
+  index: -1
+MParticle
+  rotate: false
+  xy: 490, 71
+  size: 8, 8
+  orig: 8, 8
+  offset: 0, 0
+  index: -1
+PowerUp
+  rotate: false
+  xy: 2, 7
+  size: 32, 32
+  orig: 32, 32
+  offset: 0, 0
+  index: -1
+PowerUp1
+  rotate: false
+  xy: 245, 28
+  size: 32, 32
+  orig: 32, 32
+  offset: 0, 0
+  index: -1
+PowerUp2
+  rotate: false
+  xy: 36, 7
+  size: 32, 32
+  orig: 32, 32
+  offset: 0, 0
+  index: -1
+PowerUp3
+  rotate: false
+  xy: 287, 38
+  size: 32, 32
+  orig: 32, 32
+  offset: 0, 0
+  index: -1
+PowerUp4
+  rotate: false
+  xy: 321, 38
+  size: 32, 32
+  orig: 32, 32
+  offset: 0, 0
+  index: -1
+RedBloodCell
+  rotate: false
+  xy: 151, 15
+  size: 45, 45
+  orig: 45, 45
+  offset: 0, 0
+  index: -1
+Team3Soldier
+  rotate: false
+  xy: 12, 2
+  size: 3, 3
+  orig: 3, 3
+  offset: 0, 0
+  index: -1
+Team4Soldier
+  rotate: false
+  xy: 17, 2
+  size: 3, 3
+  orig: 3, 3
+  offset: 0, 0
+  index: -1
+YellowBarrack
+  rotate: false
+  xy: 89, 15
+  size: 60, 45
+  orig: 60, 45
+  offset: 0, 0
+  index: -1
+arrow-off
+  rotate: false
+  xy: 287, 72
+  size: 54, 54
+  orig: 54, 54
+  offset: 0, 0
+  index: -1
+arrow-on
+  rotate: false
+  xy: 343, 72
+  size: 54, 54
+  orig: 54, 54
+  offset: 0, 0
+  index: -1
+button
+  rotate: false
+  xy: 89, 62
+  size: 64, 64
+  orig: 64, 64
+  offset: 0, 0
+  index: -1
+checkbox-off
+  rotate: false
+  xy: 355, 45
+  size: 25, 25
+  orig: 25, 25
+  offset: 0, 0
+  index: -1
+checkbox-on
+  rotate: false
+  xy: 382, 45
+  size: 25, 25
+  orig: 25, 25
+  offset: 0, 0
+  index: -1
+info
+  rotate: false
+  xy: 409, 54
+  size: 25, 25
+  orig: 25, 25
+  offset: 0, 0
+  index: -1
+light_effect
+  rotate: false
+  xy: 2, 41
+  size: 85, 85
+  orig: 85, 85
+  offset: 0, 0
+  index: -1
+line
+  rotate: false
+  xy: 86, 36
+  size: 1, 3
+  orig: 1, 3
+  offset: 0, 0
+  index: -1
+mode-move
+  rotate: false
+  xy: 409, 27
+  size: 24, 25
+  orig: 24, 25
+  offset: 0, 0
+  index: -1
+mode-select
+  rotate: false
+  xy: 436, 54
+  size: 25, 25
+  orig: 25, 25
+  offset: 0, 0
+  index: -1
+multiplayer
+  rotate: false
+  xy: 155, 62
+  size: 64, 64
+  orig: 64, 64
+  offset: 0, 0
+  index: -1
+neutral_test
+  rotate: false
+  xy: 198, 15
+  size: 45, 45
+  orig: 45, 45
+  offset: 0, 0
+  index: -1
+pause
+  rotate: false
+  xy: 463, 54
+  size: 25, 25
+  orig: 25, 25
+  offset: 0, 0
+  index: -1
+singleplayer
+  rotate: false
+  xy: 221, 62
+  size: 64, 64
+  orig: 64, 64
+  offset: 0, 0
+  index: -1
+slider
+  rotate: false
+  xy: 70, 14
+  size: 14, 25
+  orig: 14, 25
+  offset: 0, 0
+  index: -1
